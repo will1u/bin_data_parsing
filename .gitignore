@@ -1,0 +1,18 @@
+# Ignore everything in bin/ except .gitkeep
+bin/*
+!bin/.gitkeep
+
+# Ignore everything in combined_data/ except .gitkeep
+combined_data/*
+!combined_data/.gitkeep
+
+# Ignore everything in partitioned_data/ except .gitkeep
+partitioned_data/*
+!partitioned_data/.gitkeep
+
+# Ignore common generated files
+*.o           # Object files
+*.log         # Log files
+
+# Ignore IDE-specific files
+.vscode/
