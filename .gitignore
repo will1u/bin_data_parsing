@@ -10,6 +10,10 @@ combined_data/*
 partitioned_data/*
 !partitioned_data/.gitkeep
 
+# Ignore everything in obj/ except .gitkeep
+obj/*
+!obj/.gitkeep
+
 # Ignore common generated files
 *.o           # Object files
 *.log         # Log files
