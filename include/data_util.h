@@ -9,6 +9,11 @@
 #include <unordered_map>
 #include <chrono>
 #include <thread>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <arpa/inet.h>
 
 namespace DataUtil {
 
@@ -266,6 +271,138 @@ namespace DataUtil {
                 }
             }
         }
+    }
+
+    int sendFile(const string &filePath) {
+        ifstream file(filePath, ios::binary | ios::ate);
+
+        if (!file) {
+            cerr << "Could not open file: " << filePath << endl;
+            return -1;
+        }
+
+        streamsize size = file.tellg();
+        file.seekg(0, ios::beg);
+
+        vector<char> fileData(size);
+        if (!file.read(fileData.data(), size)) {
+            std::cerr << "Error: Failed to read file" << std::endl;
+            return -1;
+        }
+
+
+        int network_socket = socket(AF_INET, SOCK_STREAM, 0);
+        if (network_socket == -1) {
+            cerr << "Error creating socket!" << endl;
+            return -1;
+        }
+
+        struct sockaddr_in server_address;
+        server_address.sin_family = AF_INET;
+        server_address.sin_port = htons(8001);  // Port number
+        if (inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr) <= 0) {
+            cerr << "Invalid address!" << endl;
+            close(network_socket);
+            return -1;
+        }
+
+        int connection_status = connect(network_socket, (struct sockaddr *)&server_address, sizeof(server_address));
+        if (connection_status == -1) {
+            cerr << "Error connecting to server!" << endl;
+            close(network_socket);
+            return -1;
+        }
+
+
+        // Send file size
+        uint32_t fileSizeN = htonl(static_cast<uint32_t>(size));
+        ssize_t sentBytes = send(network_socket, &fileSizeN, sizeof(fileSizeN), 0);
+        if (sentBytes < 0) {
+            std::cerr << "Error sending file size!" << std::endl;
+            close(network_socket);
+            return -1;
+        }
+
+        // Send file data
+        sentBytes = send(network_socket, fileData.data(), fileData.size(), 0);
+        if (sentBytes < 0) {
+            std::cerr << "Error sending file data!" << std::endl;
+            close(network_socket);
+            return -1;
+        }
+
+        std::cout << "Sent " << sentBytes << " bytes of raw file data." << std::endl;
+
+        // Optionally, receive a response from the server
+        char server_response[256];
+        recv(network_socket, &server_response, sizeof(server_response), 0);
+        cout << "Server response: " << server_response << endl;
+
+        // Close the socket
+        close(network_socket);
+        return 0;
+    }
+
+    void handleClient(int client_socket, int connection_num) {
+
+        // Receive file size
+        uint32_t fileSizeN;
+        ssize_t size_received = recv(client_socket, &fileSizeN, sizeof(fileSizeN), 0);
+        if (size_received <= 0) {
+            std::cerr << "Error receiving file size!\n";
+            close(client_socket);
+            return;
+        }
+
+        // Receive file data
+        uint32_t fileSize = ntohl(fileSizeN);
+        std::vector<char> buffer(fileSize);
+        ssize_t total_received = 0;
+        std::string timestamp;
+        while (total_received < (ssize_t)fileSize) {
+            ssize_t bytes = recv(client_socket, buffer.data() + total_received, fileSize - total_received, 0);
+            timestamp = TimingUtil::getTime();
+            
+            if (bytes <= 0) {
+                std::cerr << "Error receiving file data!\n";
+                close(client_socket);
+                return;
+            }
+            total_received += bytes;
+        }
+
+        // Send a response to the client
+        std::string response = "File received successfully!";
+        send(client_socket, response.c_str(), response.size(), 0);
+
+
+        // Close client socket 
+        close(client_socket);
+        std::cout << "Client socket closed.\n"; 
+
+
+        // Write file data to disk
+        std::cout << "Writing client data to disk.\n"; 
+        string pathToDirectory = "~/projects/data_parsing/partitioned_data/";
+        pathToDirectory = DirectoryUtil::expandTilde(pathToDirectory);
+
+        string receivedFileName = pathToDirectory + "received_file_" + std::to_string(connection_num) + ".dat";
+        
+        if (!std::filesystem::exists(pathToDirectory)) {
+            std::filesystem::create_directories(pathToDirectory);
+        }
+        
+        std::ofstream outFile(receivedFileName, std::ios::binary);
+        if (!outFile) {
+            std::cerr << "Could not create output file.\n";
+            return;
+        }
+
+        else {
+            outFile.write(buffer.data(), buffer.size());
+            std::cout << "Wrote " << buffer.size() << " bytes to " + receivedFileName + ".\n";
+        }
+
     }
 
 
