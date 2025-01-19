@@ -29,7 +29,6 @@ int main() {
         directoryPath = DirectoryUtil::expandTilde(directoryPath);
         string filePath = directoryPath + "file-" + std::to_string(i) + ".dat";
 
-
         threads.emplace_back(DataUtil::sendFile, filePath);
     }
 

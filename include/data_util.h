@@ -14,6 +14,10 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <algorithm>
+
+#include "timing_util.h"
+#include "directory_util.h"
 
 namespace DataUtil {
 
@@ -71,6 +75,10 @@ namespace DataUtil {
                 std::cout << std::bitset<10>(hit) << " "; // Each hit as 10 bits
             }
             std::cout << "\n----------------------------------\n";
+        }
+
+        bool operator<(const DataPoint& other) const {
+            return timestamp < other.timestamp;
         }
     };
 
@@ -219,17 +227,17 @@ namespace DataUtil {
         return result;
     }
 
-    void watchDirectory(const std::string &directoryPath, const std::string&resultPath) {
+    std::vector<DataUtil::DataPoint> watchDirectory(const std::string &directoryPath) {
         
-        // scans for changes in directory and sends changes to resultPath
+        // scans for changes in raw data directory and puts them into a vector<DataUtil::DataPoint>
         
         std::unordered_map<std::string, std::filesystem::file_time_type> files;
+        std::vector<DataUtil::DataPoint> result_data_list;
 
         for (const auto &entry : std::filesystem::directory_iterator(directoryPath)) {
             files[entry.path().string()] = std::filesystem::last_write_time(entry);
         }
         
-        bool firstBatch = true;
 
         while (true) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Poll every 0.5 second
@@ -243,15 +251,7 @@ namespace DataUtil {
                     files[filePath] = currentFileTime;
                     
                     std::vector<DataPoint> data_list = readBits(filePath);
-                    // NEED TO DO SOME SYNCHRONIZATION
-                    // if (firstBatch == true) { 
-                    //     uint32_t firstTimestamp = data_list[0].timestamp;
-                    //     for (auto i : data_list){
-                    //         i.timestamp = firstTimestamp;
-                    //     }
-                    //     firstBatch = false;
-                    // }
-                    partitionToOutput(resultPath, data_list, true);
+                    result_data_list.insert(result_data_list.end(), data_list.begin(), data_list.end());
 
 
                 } else if (files[filePath] != currentFileTime) {
@@ -259,32 +259,32 @@ namespace DataUtil {
                     files[filePath] = currentFileTime;
                     
                     std::vector<DataPoint> data_list = readBits(filePath);
-                    // NEED TO DO SOME SYNCHRONIZATION
-                    // if (firstBatch == true) { 
-                    //     uint32_t firstTimestamp = data_list[0].timestamp;
-                    //     for (auto i : data_list){
-                    //         i.timestamp = firstTimestamp;
-                    //     }
-                    //     firstBatch = false;
-                    // }
-                    partitionToOutput(resultPath, data_list, true);
+                    result_data_list.insert(result_data_list.end(), data_list.begin(), data_list.end());
                 }
             }
         }
+
+        return result_data_list;
     }
 
-    int sendFile(const string &filePath) {
-        ifstream file(filePath, ios::binary | ios::ate);
+    std::vector<DataUtil::DataPoint> sortDataList(std::vector<DataUtil::DataPoint> dataList){
+        std::vector<DataUtil::DataPoint> sortedDataList = dataList;
+        std::sort(sortedDataList.begin(), sortedDataList.end());   
+        return sortedDataList;
+    }
+
+    int sendFile(const std::string &filePath) {
+        std::ifstream file(filePath, std::ios::binary | std::ios::ate);
 
         if (!file) {
-            cerr << "Could not open file: " << filePath << endl;
+            std::cerr << "Could not open file: " << filePath << std::endl;
             return -1;
         }
 
-        streamsize size = file.tellg();
-        file.seekg(0, ios::beg);
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
 
-        vector<char> fileData(size);
+        std::vector<char> fileData(size);
         if (!file.read(fileData.data(), size)) {
             std::cerr << "Error: Failed to read file" << std::endl;
             return -1;
@@ -293,7 +293,7 @@ namespace DataUtil {
 
         int network_socket = socket(AF_INET, SOCK_STREAM, 0);
         if (network_socket == -1) {
-            cerr << "Error creating socket!" << endl;
+            std::cerr << "Error creating socket!" << std::endl;
             return -1;
         }
 
@@ -301,14 +301,14 @@ namespace DataUtil {
         server_address.sin_family = AF_INET;
         server_address.sin_port = htons(8001);  // Port number
         if (inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr) <= 0) {
-            cerr << "Invalid address!" << endl;
+            std::cerr << "Invalid address!" << std::endl;
             close(network_socket);
             return -1;
         }
 
         int connection_status = connect(network_socket, (struct sockaddr *)&server_address, sizeof(server_address));
         if (connection_status == -1) {
-            cerr << "Error connecting to server!" << endl;
+            std::cerr << "Error connecting to server!" << std::endl;
             close(network_socket);
             return -1;
         }
@@ -336,7 +336,7 @@ namespace DataUtil {
         // Optionally, receive a response from the server
         char server_response[256];
         recv(network_socket, &server_response, sizeof(server_response), 0);
-        cout << "Server response: " << server_response << endl;
+        std::cout << "Server response: " << server_response << std::endl;
 
         // Close the socket
         close(network_socket);
@@ -383,10 +383,10 @@ namespace DataUtil {
 
         // Write file data to disk
         std::cout << "Writing client data to disk.\n"; 
-        string pathToDirectory = "~/projects/data_parsing/partitioned_data/";
+        std::string pathToDirectory = "~/projects/data_parsing/partitioned_data/";
         pathToDirectory = DirectoryUtil::expandTilde(pathToDirectory);
 
-        string receivedFileName = pathToDirectory + "received_file_" + std::to_string(connection_num) + ".dat";
+        std::string receivedFileName = pathToDirectory + "received_file_" + std::to_string(connection_num) + ".dat";
         
         if (!std::filesystem::exists(pathToDirectory)) {
             std::filesystem::create_directories(pathToDirectory);
