@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <algorithm>
+#include <atomic>
 
 #include "timing_util.h"
 #include "directory_util.h"
@@ -227,7 +228,7 @@ namespace DataUtil {
         return result;
     }
 
-    std::vector<DataUtil::DataPoint> watchDirectory(const std::string &directoryPath) {
+    std::vector<DataUtil::DataPoint> watchDirectory(const std::string &directoryPath, std::atomic<bool> &stop) {
         
         // scans for changes in raw data directory and puts them into a vector<DataUtil::DataPoint>
         
@@ -239,8 +240,8 @@ namespace DataUtil {
         }
         
 
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Poll every 0.5 second
+        while (!stop.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500)); 
 
             for (const auto &entry : std::filesystem::directory_iterator(directoryPath)) {
                 auto currentFileTime = std::filesystem::last_write_time(entry);
@@ -344,7 +345,9 @@ namespace DataUtil {
     }
 
     void handleClient(int client_socket, int connection_num) {
-
+        std::cout << "*********************************************" << std::endl;
+        std::cout << "Connection started at: " << TimingUtil::getTime() << std::endl;
+        std::cout << "*********************************************" << std::endl;
         // Receive file size
         uint32_t fileSizeN;
         ssize_t size_received = recv(client_socket, &fileSizeN, sizeof(fileSizeN), 0);
@@ -402,7 +405,9 @@ namespace DataUtil {
             outFile.write(buffer.data(), buffer.size());
             std::cout << "Wrote " << buffer.size() << " bytes to " + receivedFileName + ".\n";
         }
-
+        std::cout << "*********************************************" << std::endl;
+        std::cout << "Connection ended at: " << TimingUtil::getTime() << std::endl;
+        std::cout << "*********************************************" << std::endl;
     }
 
 

@@ -15,28 +15,44 @@
 #include "packet.h"
 #include "directory_util.h"
 
-using namespace std;
-
 int main() {
+    int numFiles = 256;
+    std::atomic<bool> startSending(false); 
+    std::atomic<bool> stopSending(false);  
 
-    int numFiles = 3;
-
-    vector<thread> threads; // Vector to hold threads
+    std::vector<std::thread> threads; 
 
     for (int i = 1; i <= numFiles; i++) {
-
-        string directoryPath = "~/projects/data_parsing/tests/";
+        std::string directoryPath = "~/projects/data_parsing/tests/";
         directoryPath = DirectoryUtil::expandTilde(directoryPath);
-        string filePath = directoryPath + "file-" + std::to_string(i) + ".dat";
+        std::string filePath = directoryPath + "file-" + std::to_string(i) + ".dat";
 
-        threads.emplace_back(DataUtil::sendFile, filePath);
+        // Launch a thread for each file
+        threads.emplace_back([&, filePath]() {
+            while (!startSending.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
+                if (stopSending.load()) return; 
+            }
+            DataUtil::sendFile(filePath);
+            if (stopSending.load()) return; 
+        });
     }
+
+    // dummy start and stop control for now
+    std::cout << "Press Enter to start sending files..." << std::endl;
+    std::cin.get(); 
+    startSending.store(true); 
+
+    std::cout << "Press Enter to stop sending files..." << std::endl;
+    std::cin.get(); 
+    stopSending.store(true); 
+
 
     for (auto &t : threads) {
         t.join();
     }
 
-    cout << "All files have been sent." << endl;
+    std::cout << "All files have been sent or stopped." << std::endl;
 
     return 0;
 }

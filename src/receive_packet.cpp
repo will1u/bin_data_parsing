@@ -44,7 +44,7 @@ int main() {
         return -1;
     }
 
-    if (listen(server_socket, 5) < 0) {
+    if (listen(server_socket, 1024) < 0) {
         cerr << "Error listening on socket!" << endl;
         close(server_socket);
         return -1;
@@ -55,7 +55,7 @@ int main() {
     // Accept connections in a loop
     int connections = 0;
     
-    while (connections < 3) {
+    while (connections < 256) {
         
         cout << "debug pt 1" << endl;
         struct sockaddr_in client_address;
@@ -69,7 +69,7 @@ int main() {
             std::cerr << "Error accepting connection!" << std::endl;
             break;
         }
-
+        
         std::cout << "Client connected!" << std::endl;
 
         // Spawn a new thread for this client

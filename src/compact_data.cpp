@@ -2,6 +2,11 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <atomic>
+#include <vector>
+#include <thread>
+#include <future>
+
 #include "data_util.h"
 #include "directory_util.h" 
 #include "timing_util.h"
@@ -17,9 +22,29 @@ int main() {
     resultDirectory = DirectoryUtil::expandTilde(resultDirectory); 
     string sortedResultFile = resultDirectory + "sorted_combined_data_" + TimingUtil::getTime() + ".txt";
 
-    //watchDirectory needs to have some kind of stop? or maybe i just sort as it goes
-    vector<DataUtil::DataPoint> compactDataList = DataUtil::watchDirectory(rawDirectory);
-    DataUtil::partitionToOutput(sortedResultFile, compactDataList, false);    
+
+
+    atomic<bool> stop = false;
+    promise<vector<DataUtil::DataPoint>> promise;
+    future<vector<DataUtil::DataPoint>> future = promise.get_future();
+    
+    std::thread watcher([&](std::promise<std::vector<DataUtil::DataPoint>> &&p, const std::string &dir, std::atomic<bool> &stopFlag) {
+        // Call watchDirectory and return its result via promise
+        auto result = DataUtil::watchDirectory(dir, stopFlag);
+        p.set_value(result); // Pass the result to the promise
+    }, std::move(promise), rawDirectory, std::ref(stop));
+
+
+    // dummy stop control for now
+    std::cout << "Press Enter to stop watching..." << std::endl;
+    std::cin.get(); 
+    stop.store(true);
+
+    watcher.join();
+    auto compactDataList = future.get();
+    vector<DataUtil::DataPoint> sortedCompact = DataUtil::sortDataList(compactDataList);
+ 
+    DataUtil::partitionToOutput(sortedResultFile, sortedCompact, false);    
 
     return 0;
 }
