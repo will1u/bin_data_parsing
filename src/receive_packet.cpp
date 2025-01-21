@@ -18,8 +18,6 @@
 
 using namespace std;
 
-
-
 int main() {
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == -1) {
@@ -30,8 +28,6 @@ int main() {
     int opt = 1;
     setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
 
-    
-    
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons(8001);

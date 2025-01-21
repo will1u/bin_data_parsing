@@ -20,12 +20,20 @@ int main() {
     std::atomic<bool> startSending(false); 
     std::atomic<bool> stopSending(false);  
 
-    std::vector<std::thread> threads; 
+    std::vector<std::thread> threads;
 
-    for (int i = 1; i <= numFiles; i++) {
-        std::string directoryPath = "~/projects/data_parsing/tests/";
+    std::vector<void*> memoryAddresses = {}; 
+    int file_counter = 0; // figure out better naming convention later
+    
+    for (auto i : memoryAddresses) {
+
+        // for testing, look in /tests for pre-made files
+        // std::string directoryPath = "~/projects/data_parsing/tests/";
+
+        std::string directoryPath = "~/projects/data_parsing/memory_data/";
         directoryPath = DirectoryUtil::expandTilde(directoryPath);
-        std::string filePath = directoryPath + "file-" + std::to_string(i) + ".dat";
+        std::string filePath = directoryPath + "file-" + std::to_string(file_counter) + ".dat";
+        DataUtil::writeFromMemory(i, filePath);
 
         // Launch a thread for each file
         threads.emplace_back([&, filePath]() {
@@ -36,6 +44,8 @@ int main() {
             DataUtil::sendFile(filePath);
             if (stopSending.load()) return; 
         });
+
+        file_counter += 1;
     }
 
     // dummy start and stop control for now

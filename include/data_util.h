@@ -16,6 +16,13 @@
 #include <arpa/inet.h>
 #include <algorithm>
 #include <atomic>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <cstring>
+#include <cstdint>
+
 
 #include "timing_util.h"
 #include "directory_util.h"
@@ -411,4 +418,13 @@ namespace DataUtil {
     }
 
 
+    void writeFromMemory(void *memory_addr, std::string outFile,  size_t size = 8) {
+        std::ofstream out(outFile, std::ios::binary);
+        if (!out) {
+            std::cerr << "Could not open output file: " << outFile << std::endl;
+            return;
+        }
+        
+        out.write(reinterpret_cast<char*>(memory_addr), size);
+    }
 }
