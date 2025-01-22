@@ -10,7 +10,8 @@
 #include <sstream>
 #include <thread>
 #include <cstdlib>
-
+#include <poll.h>
+#include <atomic>
 #include "data_util.h"
 #include "packet.h"
 #include "timing_util.h"
@@ -51,8 +52,29 @@ int main() {
     // Accept connections in a loop
     int connections = 0;
     std::atomic<int> activeThreads(0);
-    
-    while (connections < 256) {
+
+    atomic<bool> closeServer = false;
+    thread serverCloser([&closeServer]() {
+        cout << "Press Enter to stop the server..." << endl;
+        cin.get();
+        closeServer.store(true);
+    });
+
+    while (!closeServer.load()) {
+        
+
+        struct pollfd pfd;
+        pfd.fd = server_socket;
+        pfd.events = POLLIN; // Wait for incoming connections
+        int poll_result = poll(&pfd, 1, 100); // Timeout after 100 milliseconds
+
+        if (poll_result == -1) {
+            std::cerr << "Error with poll()." << std::endl;
+            break;
+        } else if (poll_result == 0) {
+            // Timeout, check `closeServer`
+            continue;
+        }
         
         cout << "debug pt 1" << endl;
         struct sockaddr_in client_address;
@@ -93,8 +115,7 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    // Close server socket
     close(server_socket);
-
+    serverCloser.join();
     return 0;
 }
