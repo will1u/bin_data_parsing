@@ -240,6 +240,7 @@ namespace DataUtil {
         }
         
 
+        int newFileCounter = 0;
         while (!stop.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500)); 
 
@@ -248,7 +249,9 @@ namespace DataUtil {
                 const std::string filePath = entry.path().string();
 
                 if (files.find(filePath) == files.end()) {
-                    std::cout << "New file detected: " << filePath << std::endl;
+                    std::cout << std::to_string(newFileCounter + 1) << ": New file detected: " << filePath << std::endl;
+                    newFileCounter += 1;
+                    
                     files[filePath] = currentFileTime;
                     
                     std::vector<DataPoint> data_list = readBits(filePath);
@@ -256,7 +259,9 @@ namespace DataUtil {
 
 
                 } else if (files[filePath] != currentFileTime) {
-                    std::cout << "File modified: " << filePath << std::endl;
+                    std::cout << std::to_string(newFileCounter + 1) << ": File modified: " << filePath << std::endl;
+                    newFileCounter += 1;
+                    
                     files[filePath] = currentFileTime;
                     
                     std::vector<DataPoint> data_list = readBits(filePath);
