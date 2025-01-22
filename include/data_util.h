@@ -360,7 +360,7 @@ namespace DataUtil {
             std::cerr << "Error: Null memory address provided." << std::endl;
             return -1;
         }
-        
+
         int network_socket = socket(AF_INET, SOCK_STREAM, 0);
         if (network_socket == -1) {
             std::cerr << "Error creating socket!" << std::endl;
@@ -458,8 +458,7 @@ namespace DataUtil {
 
         std::vector<char> buffer(fileSize);
         ssize_t total_received = 0;
-
-
+        
         while (total_received < (ssize_t)fileSize) {
             ssize_t bytes = recv(client_socket, buffer.data() + total_received, fileSize - total_received, 0);
             if (bytes <= 0) {

@@ -50,6 +50,7 @@ int main() {
 
     // Accept connections in a loop
     int connections = 0;
+    std::atomic<int> activeThreads(0);
     
     while (connections < 256) {
         
@@ -68,12 +69,18 @@ int main() {
         
         std::cout << "Client connected!" << std::endl;
 
+        activeThreads += 1;
+
         // Spawn a new thread for this client
         cout << "debug pt 3" << endl;
-        std::thread t(DataUtil::handleClient, client_socket, connections + 1); 
-        t.join();
+        std::thread t([client_socket, connections, &activeThreads]() {
+            DataUtil::handleClient(client_socket, connections + 1);
 
-        // DataUtil::handleClient(client_socket, connections + 1);
+            // Decrement the active thread count when done
+            activeThreads--;
+        });
+
+        t.detach();
         connections += 1;
 
         cout << "----------------------------------" << endl;
@@ -82,6 +89,10 @@ int main() {
         
     }
     
+    while (activeThreads > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
     // Close server socket
     close(server_socket);
 
