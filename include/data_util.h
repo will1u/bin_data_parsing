@@ -246,7 +246,7 @@ namespace DataUtil {
             files[entry.path().string()] = std::filesystem::last_write_time(entry);
         }
         
-
+        int newFileCounter = 0;
         while (!stop.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500)); 
 
@@ -255,7 +255,9 @@ namespace DataUtil {
                 const std::string filePath = entry.path().string();
 
                 if (files.find(filePath) == files.end()) {
-                    std::cout << "New file detected: " << filePath << std::endl;
+                    std::cout << std::to_string(newFileCounter + 1) << ": New file detected: " << filePath << std::endl;
+                    newFileCounter += 1;
+                    
                     files[filePath] = currentFileTime;
                     
                     std::vector<DataPoint> data_list = readBits(filePath);
@@ -263,7 +265,9 @@ namespace DataUtil {
 
 
                 } else if (files[filePath] != currentFileTime) {
-                    std::cout << "File modified: " << filePath << std::endl;
+                    std::cout << std::to_string(newFileCounter + 1) << ": File modified: " << filePath << std::endl;
+                    newFileCounter += 1;
+                    
                     files[filePath] = currentFileTime;
                     
                     std::vector<DataPoint> data_list = readBits(filePath);
@@ -351,80 +355,170 @@ namespace DataUtil {
         return 0;
     }
 
+    int sendFromMemory(void* mem_addr, size_t size) {
+        if (mem_addr == nullptr) {
+            std::cerr << "Error: Null memory address provided." << std::endl;
+            return -1;
+        }
+        
+        int network_socket = socket(AF_INET, SOCK_STREAM, 0);
+        if (network_socket == -1) {
+            std::cerr << "Error creating socket!" << std::endl;
+            return -1;
+        }
+
+        struct sockaddr_in server_address;
+        server_address.sin_family = AF_INET;
+        server_address.sin_port = htons(8001);  
+        if (inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr) <= 0) {
+            std::cerr << "Invalid address!" << std::endl;
+            close(network_socket);
+            return -1;
+        }
+
+        int connection_status = connect(network_socket, (struct sockaddr*)&server_address, sizeof(server_address));
+        if (connection_status == -1) {
+            std::cerr << "Error connecting to server! errno: " << errno 
+                    << " (" << strerror(errno) << ")" << std::endl;
+            close(network_socket);
+            return -1;
+        }
+
+        // Send file size
+        uint32_t fileSizeN = htonl(static_cast<uint32_t>(size)); // Convert to network byte order
+        ssize_t sentBytes = send(network_socket, &fileSizeN, sizeof(fileSizeN), 0);
+        if (sentBytes < 0) {
+            std::cerr << "Error sending file size!" << std::endl;
+            close(network_socket);
+            return -1;
+        }
+
+        // Send file data
+        sentBytes = send(network_socket, mem_addr, size, 0); // Send actual file data
+        if (sentBytes < 0) {
+            std::cerr << "Error sending file data!" << std::endl;
+            close(network_socket);
+            return -1;
+        }   
+
+        std::cout << "Successfully sent " << sentBytes << " bytes from memory." << std::endl;
+        close(network_socket);
+        return 0;   
+    }
+
+    std::pair<char*, size_t> mapToMemory(std::string filePath) {
+        int fd = open(filePath.c_str(), O_RDONLY);
+
+        struct stat sb;
+        if (fstat(fd, &sb) == -1) {
+            std::cerr << "Error with file size " << std::endl;
+            close(fd);
+            return {nullptr, 0};
+        }
+
+        std::cout << "File size: " << sb.st_size << std::endl;
+
+        char* file_in_memory = static_cast<char*>(mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
+        close(fd);
+        
+        if (file_in_memory == MAP_FAILED) {
+            std::cerr << "Error mapping file: " << filePath << std::endl;
+            return {nullptr, 0};
+        }
+
+        return {file_in_memory, static_cast<size_t>(sb.st_size)};
+    }
+
+
     void handleClient(int client_socket, int connection_num) {
-        std::cout << "*********************************************" << std::endl;
-        std::cout << "Connection started at: " << TimingUtil::getTime() << std::endl;
-        std::cout << "*********************************************" << std::endl;
-        // Receive file size
+        
+        // Receive file size (known file)
         uint32_t fileSizeN;
+        std::cout << "debug pt 4" << std::endl;
+
         ssize_t size_received = recv(client_socket, &fileSizeN, sizeof(fileSizeN), 0);
-        if (size_received <= 0) {
-            std::cerr << "Error receiving file size!\n";
+        if (size_received < 0) {
+            std::cerr << "Error receiving file size! recv() failed with error: " << strerror(errno) << std::endl;
             close(client_socket);
             return;
+        } else if (size_received != sizeof(fileSizeN)) {
+            std::cerr << "Partial file size received. Expected " << sizeof(fileSizeN)
+                    << " bytes, but received " << size_received << " bytes." << std::endl;
+            close(client_socket);
+            return;
+        } else {
+            std::cout << "Successfully received file size: " << ntohl(fileSizeN) << " bytes." << std::endl;
         }
 
         // Receive file data
+    
+        // Convert file size back to host byte order
         uint32_t fileSize = ntohl(fileSizeN);
+        std::cout << "File size to receive: " << fileSize << " bytes." << std::endl;
+
         std::vector<char> buffer(fileSize);
         ssize_t total_received = 0;
-        std::string timestamp;
+
+
         while (total_received < (ssize_t)fileSize) {
             ssize_t bytes = recv(client_socket, buffer.data() + total_received, fileSize - total_received, 0);
-            timestamp = TimingUtil::getTime();
-            
             if (bytes <= 0) {
-                std::cerr << "Error receiving file data!\n";
+                std::cerr << "Error receiving file data!" << std::endl;
                 close(client_socket);
                 return;
             }
             total_received += bytes;
         }
-
-        // Send a response to the client
-        std::string response = "File received successfully!";
-        send(client_socket, response.c_str(), response.size(), 0);
-
+        std::cout << "debug pt 5" << std::endl;
+        std::cout << "Successfully received " << total_received << " bytes." << std::endl;
 
         // Close client socket 
         close(client_socket);
         std::cout << "Client socket closed.\n"; 
 
-
+        std::cout << "debug pt 6" << std::endl;
         // Write file data to disk
         std::cout << "Writing client data to disk.\n"; 
         std::string pathToDirectory = "~/projects/data_parsing/partitioned_data/";
         pathToDirectory = DirectoryUtil::expandTilde(pathToDirectory);
+        std::cout << "Expanded path to directory: " << pathToDirectory << std::endl;
 
+        if (!std::filesystem::exists(pathToDirectory)) {
+            
+            std::cout << "debug pt 7" << std::endl;
+            
+            if (!std::filesystem::create_directories(pathToDirectory)) {
+                std::cerr << "Failed to create directory: " << pathToDirectory << std::endl;
+                return;
+            }
+        }
+        
         std::string receivedFileName = pathToDirectory + "received_file_" + std::to_string(connection_num) + ".dat";
         
-        if (!std::filesystem::exists(pathToDirectory)) {
-            std::filesystem::create_directories(pathToDirectory);
-        }
-        
+        std::cout << "Attempting to open file: " << receivedFileName << std::endl;
         std::ofstream outFile(receivedFileName, std::ios::binary);
+
+        std::cout << "debug pt 8" << std::endl;
         if (!outFile) {
-            std::cerr << "Could not create output file.\n";
+            std::cerr << "Could not create output file: " << receivedFileName << std::endl;
             return;
+        } else {
+            std::cout << "Successfully opened file for writing: " << receivedFileName << std::endl;
         }
 
-        else {
+        std::cout << "debug pt 9" << std::endl;
+        if (!buffer.empty()) {
+            // Write the buffer data to the file
+            std::cout << "Buffer size: " << buffer.size() << " bytes." << std::endl;
             outFile.write(buffer.data(), buffer.size());
-            std::cout << "Wrote " << buffer.size() << " bytes to " + receivedFileName + ".\n";
+            if (outFile.fail()) {
+                std::cerr << "Error writing data to file: " << receivedFileName << std::endl;
+            } else {
+                std::cout << "Successfully wrote " << buffer.size() << " bytes to " << receivedFileName << std::endl;
+            }
+        } else {
+            std::cerr << "Buffer is empty, nothing to write to file." << std::endl;
         }
-        std::cout << "*********************************************" << std::endl;
-        std::cout << "Connection ended at: " << TimingUtil::getTime() << std::endl;
-        std::cout << "*********************************************" << std::endl;
-    }
 
-
-    void writeFromMemory(void *memory_addr, std::string outFile,  size_t size = 8) {
-        std::ofstream out(outFile, std::ios::binary);
-        if (!out) {
-            std::cerr << "Could not open output file: " << outFile << std::endl;
-            return;
-        }
-        
-        out.write(reinterpret_cast<char*>(memory_addr), size);
     }
 }

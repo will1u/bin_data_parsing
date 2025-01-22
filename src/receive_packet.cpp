@@ -71,7 +71,9 @@ int main() {
         // Spawn a new thread for this client
         cout << "debug pt 3" << endl;
         std::thread t(DataUtil::handleClient, client_socket, connections + 1); 
-        t.detach();
+        t.join();
+
+        // DataUtil::handleClient(client_socket, connections + 1);
         connections += 1;
 
         cout << "----------------------------------" << endl;

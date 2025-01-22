@@ -28,6 +28,8 @@ int main() {
     promise<vector<DataUtil::DataPoint>> promise;
     future<vector<DataUtil::DataPoint>> future = promise.get_future();
     
+
+    
     std::thread watcher([&](std::promise<std::vector<DataUtil::DataPoint>> &&p, const std::string &dir, std::atomic<bool> &stopFlag) {
         // Call watchDirectory and return its result via promise
         auto result = DataUtil::watchDirectory(dir, stopFlag);
