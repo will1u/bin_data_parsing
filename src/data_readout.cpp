@@ -16,6 +16,9 @@
 #include "packet.h"
 #include "directory_util.h"
 
+#define BRAM_ADDR 0
+#define BRAM_SIZE 4096
+
 int main() {
     int numFiles = 256;
     std::atomic<bool> startSending(false); 
@@ -27,47 +30,51 @@ int main() {
     std::string directoryPath = "~/projects/data_parsing/tests/";
     directoryPath = DirectoryUtil::expandTilde(directoryPath);
 
-    std::vector<std::pair<char*, size_t>> memoryRegions;
+    // std::vector<std::pair<char*, size_t>> memoryRegions;
+    std::pair<char*, size_t> bramRegion;
 
-    for (int i = 0; i < numFiles; i++) {
-        std::string filePath = directoryPath + "file-" + std::to_string(i + 1) + ".dat";
+    // making fake data FOR DDR VERSION
+    // for (int i = 0; i < numFiles; i++) {
+    //     std::string filePath = directoryPath + "file-" + std::to_string(i + 1) + ".dat";
 
-        // Map file to memory
-        auto memoryRegion = DataUtil::mapToMemory(filePath);
-        char* memoryAddress = memoryRegion.first;
-        size_t fileSize = memoryRegion.second;
+    //     // Map file to memory
+    //     auto memoryRegion = DataUtil::mapToMemory(filePath);
+    //     char* memoryAddress = memoryRegion.first;
+    //     size_t fileSize = memoryRegion.second;
 
-        // Check if mapping was successful
-        if (memoryAddress) {
-            memoryRegions.emplace_back(memoryAddress, fileSize);
+    //     // Check if mapping was successful
+    //     if (memoryAddress) {
+    //         memoryRegions.emplace_back(memoryAddress, fileSize);
 
-            // Debugging output
-            std::cout << "File: " << filePath
-                    << ", Mapped to address: " << static_cast<void*>(memoryAddress)
-                    << ", Size: " << fileSize << " bytes." << std::endl;
-        } else {
-            std::cerr << "Failed to map file: " << filePath << std::endl;
+    //         // Debugging output
+    //         std::cout << "File: " << filePath
+    //                 << ", Mapped to address: " << static_cast<void*>(memoryAddress)
+    //                 << ", Size: " << fileSize << " bytes." << std::endl;
+    //     } else {
+    //         std::cerr << "Failed to map file: " << filePath << std::endl;
+    //     }
+    // }
+
+    bramRegion = DataUtil::mapToBRAM(BRAM_ADDR, BRAM_SIZE);
+
+
+    char* memAddr = bramRegion.first;
+    size_t size = bramRegion.second;
+    std::cout << "memAddr: " << memAddr << std::endl;
+
+    threads.emplace_back([&, memAddr, size]() {
+        while (!startSending.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (stopSending.load()) return;
         }
-    }
-
-    for (const auto& region : memoryRegions) {
-        char* memAddr = region.first;
-        size_t size = region.second;
-
-        threads.emplace_back([&, memAddr, size]() {
-            while (!startSending.load()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                if (stopSending.load()) return;
-            }
-            {
-                std::lock_guard<std::mutex> lock(logMutex);
-                std::cout << "Thread ID: " << std::this_thread::get_id()
-                        << ", Memory address: " << static_cast<void*>(memAddr)
-                        << std::endl;
-            }
-            DataUtil::sendFromMemory(memAddr, size);
-        });
-    }
+        {
+            std::lock_guard<std::mutex> lock(logMutex);
+            std::cout << "Thread ID: " << std::this_thread::get_id()
+                    << ", Memory address: " << static_cast<void*>(memAddr)
+                    << std::endl;
+        }
+        DataUtil::sendFromMemory(memAddr, size);
+    });
 
     // dummy start and stop control for now
     std::cout << "Press Enter to start sending files..." << std::endl;

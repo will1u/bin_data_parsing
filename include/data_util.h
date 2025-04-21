@@ -429,6 +429,44 @@ namespace DataUtil {
         return {file_in_memory, static_cast<size_t>(sb.st_size)};
     }
 
+    std::pair<char*, size_t> mapToBRAM(uintptr_t BRAM_ADDR, size_t BRAM_SIZE, bool test = false) {
+        
+        if (not test) { 
+            int fd = open("/dev/mem", O_RDONLY | O_SYNC);
+            if (fd < 0) {
+                std::cerr << "Error opening /dev/mem. Are you running as root?\n";
+                return {nullptr, 0};
+            }
+        
+            void* addr = mmap(nullptr, BRAM_SIZE, PROT_READ, MAP_SHARED, fd, BRAM_ADDR);
+            close(fd);  // Done with the fd after mmap
+        
+            if (addr == MAP_FAILED) {
+                std::cerr << "Failed to mmap BRAM address.\n";
+                return {nullptr, 0};
+            }
+        
+            return {static_cast<char*>(addr), BRAM_SIZE};
+        }
+
+        else { 
+            int fd = open("/dev/zero", O_RDONLY);  // Opens fake memory filled with 0s
+            if (fd < 0) {
+                std::cerr << "Error opening /dev/zero\n";
+                return {nullptr, 0};
+            }
+        
+            void* addr = mmap(nullptr, BRAM_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
+            close(fd);  // Done with the file descriptor
+        
+            if (addr == MAP_FAILED) {
+                std::cerr << "Failed to mmap from /dev/zero\n";
+                return {nullptr, 0};
+            }
+            return {static_cast<char*>(addr), BRAM_SIZE};   
+        }
+    }
+
 
     void handleClient(int client_socket, int connection_num) {
         
@@ -478,9 +516,10 @@ namespace DataUtil {
         std::cout << "debug pt 6" << std::endl;
         // Write file data to disk
         std::cout << "Writing client data to disk.\n"; 
-        std::string pathToDirectory = "~/projects/data_parsing/partitioned_data/";
-        pathToDirectory = DirectoryUtil::expandTilde(pathToDirectory);
-        std::cout << "Expanded path to directory: " << pathToDirectory << std::endl;
+        // std::string pathToDirectory = "~/projects/data_parsing/partitioned_data/";
+        // pathToDirectory = DirectoryUtil::expandTilde(pathToDirectory);
+        std::string pathToDirectory = "partitioned_data/";
+        // std::cout << "Expanded path to directory: " << pathToDirectory << std::endl;
 
         if (!std::filesystem::exists(pathToDirectory)) {
             
