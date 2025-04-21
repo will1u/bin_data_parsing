@@ -451,14 +451,13 @@ namespace DataUtil {
         }
 
         // Receive file data
-    
         // Convert file size back to host byte order
         uint32_t fileSize = ntohl(fileSizeN);
         std::cout << "File size to receive: " << fileSize << " bytes." << std::endl;
 
         std::vector<char> buffer(fileSize);
         ssize_t total_received = 0;
-        
+
         while (total_received < (ssize_t)fileSize) {
             ssize_t bytes = recv(client_socket, buffer.data() + total_received, fileSize - total_received, 0);
             if (bytes <= 0) {
@@ -478,8 +477,7 @@ namespace DataUtil {
         std::cout << "debug pt 6" << std::endl;
         // Write file data to disk
         std::cout << "Writing client data to disk.\n"; 
-        std::string pathToDirectory = "~/projects/data_parsing/partitioned_data/";
-        pathToDirectory = DirectoryUtil::expandTilde(pathToDirectory);
+        std::string pathToDirectory = "partitioned_data/";
         std::cout << "Expanded path to directory: " << pathToDirectory << std::endl;
 
         if (!std::filesystem::exists(pathToDirectory)) {

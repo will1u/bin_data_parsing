@@ -24,6 +24,8 @@ int main() {
 
     std::vector<std::thread> threads;
 
+
+    // test data : real input swill be a list of memory addresses
     std::string directoryPath = "~/projects/data_parsing/tests/";
     directoryPath = DirectoryUtil::expandTilde(directoryPath);
 
